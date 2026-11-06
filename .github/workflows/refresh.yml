@@ -1,0 +1,51 @@
+name: Refresh public VPNGate nodes
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: public-vpngate-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Run regression tests
+        run: python3 -m unittest -v test_vpngate_public.py
+      - name: Fetch, check and build public files
+        env:
+          MAX_NODES: "25"
+          CHECK_WORKER: "https://check-sstp.cryptoa13z.workers.dev/check"
+          CHECK_REQUIRED: "true"
+          CHECK_CONCURRENCY: "2"
+          CHECK_TIMEOUT: "25"
+          HTTP_TIMEOUT: "30"
+          NODE_ENTRY: "edgetunnel.cryptoa13z.workers.dev:443"
+        run: python3 vpngate_public.py
+      - name: Check public output privacy
+        run: python3 check_public.py
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public/
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
